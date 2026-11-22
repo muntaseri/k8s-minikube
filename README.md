@@ -1,4 +1,4 @@
-### Task 1:
+### Task 1: Cluster & Namespace 
 # Minikube Setup & Cluster Configuration Guide
 
 Run Kubernetes locally on macOS with Minikube.
@@ -94,11 +94,62 @@ kubectl get pods -n kube-system
 
 ![kube-system pods list](./screenshots/kubectl-info.jpg)
 
+kubelet status
 
 
-
+```bash
 minikube ssh -- systemctl status kubelet
-
+```
 ![kubelet status](./screenshots/kubelet.jpg)
 
+
+### Task 2: ConfigMap
+
+To create the cha-config ConfigMap in the cha-express namespace containing both the environment key-value pairs and the index.html file, apply the following YAML manifest using kubectl.
+1. Create the Manifest ![cha-config.yaml](./config/cha-config.yaml)
+
+
+
+2. Apply and Verify the ConfigMap
+Run the following commands to create and inspect the ConfigMap inside cha-express:
+
+```bash
+
+kubectl apply -f cha-config.yaml
+kubectl get configmap cha-config -n cha-express
+kubectl describe configmap cha-config -n cha-express
+
+```
+
+
+![configmap](./screenshots/configmap.jpg)
+
+
+
+### Task 3: Secret
+
+
+# Secret `cha-secret` and Secret Encryption in Kubernetes
+
+## 1. Create the `cha-secret` Secret
+
+Create a manifest named `cha-secret.yaml` in the `cha-express` namespace with dummy values for `ADMIN_PASSWORD` and `PAYMENT_API_KEY`:
+
+
+![cha-secret.yaml](./config/cha-secret.yaml)
+
+
+
+Apply and inspect the Secret:
+
+
+```bash
+
+kubectl apply -f cha-secret.yaml
+kubectl get secret cha-secret -n cha-express
+kubectl describe secret cha-secret -n cha-express
+
+```
+
+![Secret configuration](./screenshots/secret.jpg)
 
