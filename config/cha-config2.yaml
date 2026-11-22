@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cha-config
+  namespace: cha-express
+data:
+  SHOP_NAME: "Cha Express"
+  CITY: "Dhaka"
+  THEME_COLOR: "#B71C1C"
+  OPENING_HOURS: "08:00 AM - 11:00 PM"
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Cha Express - Updated Menu</title>
+      <style>
+        body { font-family: Arial, sans-serif; background-color: #f9fafb; color: #1f2937; margin: 0; padding: 40px 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); overflow: hidden; }
+        header { background-color: #B71C1C; color: #ffffff; padding: 24px; text-align: center; }
+        .menu { padding: 24px; }
+        .item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f3f4f6; }
+        .price { font-weight: bold; color: #B71C1C; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          <h1>Cha Express (Updated Menu)</h1>
+          <p>Dhaka &bull; Open Daily: 08:00 AM - 11:00 PM</p>
+        </header>
+        <div class="menu">
+          <h2>Tea Menu</h2>
+          <div class="item"><span>Classic Masala Cha</span><span class="price">$2.50</span></div>
+          <div class="item"><span>Malai Milk Tea</span><span class="price">$3.00</span></div>
+          <div class="item"><span>Ginger Lemon Tea</span><span class="price">$2.25</span></div>
+          <div class="item"><span>Seven-Layer Sreemangal Special</span><span class="price">$4.50</span></div>
+          <div class="item"><span>Saffron Pistachio Chai (NEW)</span><span class="price">$5.00</span></div>
+        </div>
+      </div>
+    </body>
+    </html>

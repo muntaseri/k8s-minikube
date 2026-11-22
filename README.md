@@ -352,3 +352,170 @@ The NodePort Service (cha-web-service) only routes incoming traffic to pods whos
 
 When nginx:invalid-tag-999 failed with ImagePullBackOff, the new pod never became Ready, so Kubernetes halted replacement and kept all 3 existing nginx:1.27-alpine pods serving traffic without interruption.
 
+
+
+
+
+
+
+# Task 7: Debug Challenge, "The Shop Is Closed!"
+
+## 1. Bug Analysis & Resolution
+
+### Bug 1: Invalid Container Image Tag (`nginx:1.27-alpinee`)
+
+- **Symptom Observed:**  
+  After applying the manifest, `kubectl get pods -n cha-express` shows the `cha-broken` pods stuck in `ErrImagePull` and `ImagePullBackOff` with `0/1` containers ready.
+- **How It Was Identified:**  
+  Inspected pod events using `kubectl describe pod <cha-broken-pod> -n cha-express`. The `Events` section reported:
+  `Failed to pull image "nginx:1.27-alpinee": rpc error: code = NotFound ... manifest for nginx:1.27-alpinee not found`.
+- **Root Cause:**  
+  Typo in the image tag (`nginx:1.27-alpinee` with an extra `e` instead of `nginx:1.27-alpine`).
+- **How It Was Fixed:**  
+  Corrected `spec.template.spec.containers[0].image` from `nginx:1.27-alpinee` to `nginx:1.27-alpine`.
+
+---
+
+### Bug 2: Misspelled ConfigMap Reference (`cha-confg`)
+
+- **Symptom Observed:**  
+  Once the image tag is corrected (or observed alongside image events), pods fail container startup with status `CreateContainerConfigError` and `0/1` ready.
+- **How It Was Identified:**  
+  Ran `kubectl describe pod <cha-broken-pod> -n cha-express` and checked `kubectl get configmaps -n cha-express`. The pod events showed `Error: configmap "cha-confg" not found`, whereas the actual ConfigMap in the namespace is named `cha-config`.
+- **Root Cause:**  
+  Typo in `envFrom[].configMapRef.name` (`cha-confg` missing the letter `i` instead of `cha-config`).
+- **How It Was Fixed:**  
+  Updated `configMapRef.name` from `cha-confg` to `cha-config`.
+
+---
+
+### Bug 3: Service Label Selector Mismatch (`app: cha-brokn`)
+
+- **Symptom Observed:**  
+  Even after the `cha-broken` pods reach `1/1 Running`, requests to `cha-broken-svc` fail with connection refused / no route to host, and the Service has no backend endpoints attached.
+- **How It Was Identified:**  
+  Ran `kubectl get endpoints cha-broken-svc -n cha-express` (or `kubectl describe svc cha-broken-svc -n cha-express`), which returned `<none>` for `ENDPOINTS`. Comparing `kubectl get pods -n cha-express --show-labels` (`app=cha-broken`) against the Service selector (`app=cha-brokn`) revealed the mismatch.
+- **Root Cause:**  
+  Typo in the Service's `spec.selector.app` field (`cha-brokn` missing the letter `e`), so it did not match the pod template label `app: cha-broken`.
+- **How It Was Fixed:**  
+  Updated `spec.selector.app` in `cha-broken-svc` from `cha-brokn` to `cha-broken`.
+
+---
+
+### Bug 4: Incorrect Service `targetPort` (`8080` instead of `80`)
+
+- **Symptom Observed:**  
+  With the Service endpoints populated (`<pod-ip>:8080`), curling or accessing `cha-broken-svc` on port `80` still returns `Connection refused` (`Failed to connect to cha-broken-svc port 80: Connection refused`).
+- **How It Was Identified:**  
+  Checked `kubectl describe svc cha-broken-svc -n cha-express` (`TargetPort: 8080/TCP`) and verified the port Nginx actually listens on inside the pod via `kubectl exec -n cha-express <cha-broken-pod> -- netstat -tlnp` (or `ss -tlnp`), confirming Nginx listens on port `80`, not `8080`.
+- **Root Cause:**  
+  The default `nginx:1.27-alpine` image listens on container port `80`, but `cha-broken-svc` forwarded traffic to `targetPort: 8080` where nothing was listening.
+- **How It Was Fixed:**  
+  Changed `spec.ports[0].targetPort` in `cha-broken-svc` from `8080` to `80` (and explicitly declared `containerPort: 80` on the container spec for clarity).
+
+---
+
+## 2. Corrected Manifest (`cha-fixed.yaml`)
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cha-broken
+  namespace: cha-express
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cha-broken
+  template:
+    metadata:
+      labels:
+        app: cha-broken
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: cha-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cha-broken-svc
+  namespace: cha-express
+spec:
+  selector:
+    app: cha-broken
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+## 3. Verification Commands
+   
+```bash
+kubectl apply -f cha-fixed.yaml
+
+# 1. Confirm both pods are Running and Ready (1/1)
+kubectl get pods -n cha-express -l app=cha-broken
+
+# 2. Confirm Service endpoints map to <pod-ip>:80
+kubectl get endpoints cha-broken-svc -n cha-express
+
+# 3. Test HTTP response from inside the cluster
+kubectl run curl-test --rm -it --restart=Never --image=curlimages/curl -n cha-express -- http://cha-broken-svc
+```
+
+
+![Fixed yaml ](./screenshots/fixed.jpg)
+
+
+
+
+
+# Bonus
+
+# ConfigMap Live Updates: Volume Mounts vs. Environment Variables
+
+### 1. Update `THEME_COLOR` and `index.html` in `cha-config2.yaml`
+
+
+[View cha-config2.yaml](./config/cha-config2.yaml)
+
+New yaml file `cha-config2.yaml` (for example, changing `THEME_COLOR` from `#2E7D32` to `#B71C1C` and updating the heading/prices in `index.html`), then apply it:
+
+```bash
+kubectl apply -f cha-config2.yaml
+```
+
+
+### 2. Observe What Changes in the Running Pods
+Check both the environment variable and the served index.html inside a running cha-web pod without restarting it:
+
+```bash
+POD_NAME=$(kubectl get pods -n cha-express -l app=cha-web -o jsonpath='{.items[0].metadata.name}')
+
+# 1. Check THEME_COLOR environment variable inside the container
+kubectl exec -n cha-express "$POD_NAME" -- printenv THEME_COLOR
+
+# 2. Check the served index.html content inside the container
+kubectl exec -n cha-express "$POD_NAME" -- cat /usr/share/nginx/html/index.html
+```
+
+
+![Observe the color change ](./screenshots/bonus.jpg)
+
+### 3. Question: Why Do the Two Behave Differently, and How Do You Apply All Changes?
+Why They Behave Differently
+Environment Variables (THEME_COLOR) Are Resolved Only at Container Startup:
+Linux process environment variables are injected into the container's process space by the container runtime when the container starts.
+Kubernetes has no mechanism to hot-inject updated environment variables into an already-running process, so THEME_COLOR remains frozen at #2E7D32 for the entire lifetime of the pod.
+ConfigMap Volume Mounts (index.html) Are Synced by kubelet—Except When Using subPath:
+Standard Volume Mount (Directory Mount): When a ConfigMap is mounted as a directory volume, kubelet periodically syncs ConfigMap updates (controlled by syncFrequency, default 1 minute) by atomically swapping a hidden ..data symlink inside the mounted directory. Nginx reads /usr/share/nginx/html/index.html fresh from disk on each HTTP request, so the updated HTML appears automatically without restarting the pod.
+subPath Caveat: Because our cha-web Deployment mounted index.html using subPath: index.html, Kubernetes bind-mounts the specific file inode directly rather than tracking the ..data directory symlink. As a result, a ConfigMap volume moun
+
+
