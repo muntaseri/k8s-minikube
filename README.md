@@ -1,3 +1,4 @@
+### Task 1:
 # Minikube Setup & Cluster Configuration Guide
 
 Run Kubernetes locally on macOS with Minikube.
@@ -90,4 +91,14 @@ List all running system pods to inspect them:
 ```bash
 kubectl get pods -n kube-system
 ```
+
+![kube-system pods list](./screenshots/kubectl-info.jpg)
+
+
+
+
+minikube ssh -- systemctl status kubelet
+
+![kubelet status](./screenshots/kubelet.jpg)
+
 
